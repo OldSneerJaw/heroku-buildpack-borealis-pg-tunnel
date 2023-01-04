@@ -71,7 +71,7 @@ do
             POSTGRES_INTERNAL_PORT="5432"
             SSH_PORT="22"
 
-            # Retrieve the SSH tunnel connection details from the SSH connection info env var
+            # Retrieve the secure tunnel connection details from the tunnel connection info env var
             SSH_CONNECTION_INFO=$(printenv "$ENV_VAR")
             IFS=$'|' read -r -d '' -a CONN_INFO_ARRAY <<< "$SSH_CONNECTION_INFO"
             for CONN_ITEM in "${CONN_INFO_ARRAY[@]}"

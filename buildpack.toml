@@ -1,7 +1,7 @@
 [buildpack]
-id = "borealis/postgres-ssh"
-name = "Borealis Isolated Postgres Heroku Buildpack"
-homepage = "https://github.com/OldSneerJaw/heroku-buildpack-borealis-pg-ssh"
+id = "borealis/postgres-tunnel"
+name = "Borealis Isolated Postgres Buildpack"
+homepage = "https://github.com/OldSneerJaw/heroku-buildpack-borealis-pg-tunnel"
 
 [publish]
 
