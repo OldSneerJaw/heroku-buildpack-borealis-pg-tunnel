@@ -56,16 +56,16 @@ do
         then
             # Retrieve the local host and port for the writer SSH tunnel from the "*_URL" env var
             # value
-            TUNNEL_WRITER_LOCAL_HOST="${BASH_REMATCH[2]}"
-            TUNNEL_WRITER_LOCAL_PORT="${BASH_REMATCH[3]}"
+            TUNNEL_WRITER_URL_HOST="${BASH_REMATCH[2]}"
+            TUNNEL_WRITER_URL_PORT="${BASH_REMATCH[3]}"
 
             # Retrieve the local host and port for the reader SSH tunnel from the "*_READONLY_URL"
             # env var value, if it exists
             ADDON_READONLY_DB_CONN_STR=$(printenv "${ADDON_ENV_VAR_PREFIX}_READONLY_URL" || echo '')
             if [[ "$ADDON_READONLY_DB_CONN_STR" =~ $PG_URL_PATTERN ]]
             then
-                TUNNEL_READER_LOCAL_HOST="${BASH_REMATCH[2]}"
-                TUNNEL_READER_LOCAL_PORT="${BASH_REMATCH[3]}"
+                TUNNEL_READER_URL_HOST="${BASH_REMATCH[2]}"
+                TUNNEL_READER_URL_PORT="${BASH_REMATCH[3]}"
             fi
 
             POSTGRES_INTERNAL_PORT="5432"
@@ -76,7 +76,16 @@ do
             IFS=$'|' read -r -d '' -a CONN_INFO_ARRAY <<< "$SSH_CONNECTION_INFO"
             for CONN_ITEM in "${CONN_INFO_ARRAY[@]}"
             do
-                if [[ "$CONN_ITEM" =~ ^POSTGRES_WRITER_HOST:=(.+)$ ]]
+                if [[ "$CONN_ITEM" =~ ^ADDON_ID:=(.+)$ ]]
+                then
+                    ADDON_ID=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
+                elif [[ "$CONN_ITEM" =~ ^API_BASE_URL:=(.+)$ ]]
+                then
+                    API_BASE_URL=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
+                elif [[ "$CONN_ITEM" =~ ^CLIENT_APP_JWT:=(.+)$ ]]
+                then
+                    CLIENT_APP_JWT=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
+                elif [[ "$CONN_ITEM" =~ ^POSTGRES_WRITER_HOST:=(.+)$ ]]
                 then
                     POSTGRES_WRITER_HOST=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
                 elif [[ "$CONN_ITEM" =~ ^POSTGRES_READER_HOST:=(.+)$ ]]
@@ -103,47 +112,61 @@ do
                 fi
             done
 
-            # The same add-on can be attached to an app multiple times with different environment
-            # variables, so only set up port forwarding if the SSH private key file hasn't already
-            # been created by a previous iteration
-            SSH_PRIVATE_KEY_PATH="${SSH_CONFIG_DIR}/borealis-pg_${SSH_USERNAME}_${SSH_HOST}.pem"
-            if [[ ! -e "$SSH_PRIVATE_KEY_PATH" ]]
+            if [[ "$TUNNEL_WRITER_URL_HOST" != "pg-tunnel.borealis-data.com" ]]
             then
-                # Create the SSH configuration directory if it doesn't already exist
-                mkdir -p "$SSH_CONFIG_DIR"
-                chmod 700 "$SSH_CONFIG_DIR"
-
-                # The SSH private key file doesn't yet exist, so create and populate it
-                echo "$SSH_USER_PRIVATE_KEY" > "$SSH_PRIVATE_KEY_PATH"
-                chmod 400 "$SSH_PRIVATE_KEY_PATH"
-
-                # Add the SSH server's public host key to known_hosts for server authentication
-                echo "${SSH_HOST} ${SSH_PUBLIC_HOST_KEY}" >> "${SSH_CONFIG_DIR}/known_hosts"
-
-                # Set up the port forwarding argument(s)
-                WRITER_PORT_FORWARD="${TUNNEL_WRITER_LOCAL_HOST}:${TUNNEL_WRITER_LOCAL_PORT}:${POSTGRES_WRITER_HOST}:${POSTGRES_INTERNAL_PORT}"
-                if [[ -n "$POSTGRES_READER_HOST" ]] && [[ -n "$TUNNEL_READER_LOCAL_PORT" ]]
+                # The add-on expects the client to register its IP address to connect rather than
+                # use SSH port forwarding
+                BOOT_ID=$(echo -n "$(cat /proc/sys/kernel/random/boot_id)")
+                ADDON_CLIENT_ID="${DYNO}_${BOOT_ID}"
+                curl \
+                    --request POST \
+                    "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels" \
+                    --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
+                    --header "Content-Type: application/json" \
+                    --data-raw "{\"clientId\":\"${ADDON_CLIENT_ID}\"}" &>/dev/null || exit $?
+            else
+                # The same add-on can be attached to an app multiple times with different
+                # environment variables, so only set up port forwarding if the SSH private key file
+                # hasn't already been created by a previous iteration
+                SSH_PRIVATE_KEY_PATH="${SSH_CONFIG_DIR}/borealis-pg_${SSH_USERNAME}_${SSH_HOST}.pem"
+                if [[ ! -e "$SSH_PRIVATE_KEY_PATH" ]]
                 then
-                    READER_PORT_FORWARD="${TUNNEL_READER_LOCAL_HOST}:${TUNNEL_READER_LOCAL_PORT}:${POSTGRES_READER_HOST}:${POSTGRES_INTERNAL_PORT}"
-                    PORT_FORWARD_ARGS=(-L "$WRITER_PORT_FORWARD" -L "$READER_PORT_FORWARD")
-                else
-                    PORT_FORWARD_ARGS=(-L "$WRITER_PORT_FORWARD")
-                fi
+                    # Create the SSH configuration directory if it doesn't already exist
+                    mkdir -p "$SSH_CONFIG_DIR"
+                    chmod 700 "$SSH_CONFIG_DIR"
 
-                # Create the SSH tunnel
-                "$AUTOSSH_DIR"/autossh \
-                    -M 0 \
-                    -f \
-                    -N \
-                    -o TCPKeepAlive=no \
-                    -o ServerAliveCountMax=3 \
-                    -o ServerAliveInterval=15 \
-                    -o ExitOnForwardFailure=yes \
-                    -p "$SSH_PORT" \
-                    -i "$SSH_PRIVATE_KEY_PATH" \
-                    "${PORT_FORWARD_ARGS[@]}" \
-                    "${SSH_USERNAME}@${SSH_HOST}" \
-                    || exit $?
+                    # The SSH private key file doesn't yet exist, so create and populate it
+                    echo "$SSH_USER_PRIVATE_KEY" > "$SSH_PRIVATE_KEY_PATH"
+                    chmod 400 "$SSH_PRIVATE_KEY_PATH"
+
+                    # Add the SSH server's public host key to known_hosts for server authentication
+                    echo "${SSH_HOST} ${SSH_PUBLIC_HOST_KEY}" >> "${SSH_CONFIG_DIR}/known_hosts"
+
+                    # Set up the port forwarding argument(s)
+                    WRITER_PORT_FORWARD="${TUNNEL_WRITER_URL_HOST}:${TUNNEL_WRITER_URL_PORT}:${POSTGRES_WRITER_HOST}:${POSTGRES_INTERNAL_PORT}"
+                    if [[ -n "$POSTGRES_READER_HOST" ]] && [[ -n "$TUNNEL_READER_URL_PORT" ]]
+                    then
+                        READER_PORT_FORWARD="${TUNNEL_READER_URL_HOST}:${TUNNEL_READER_URL_PORT}:${POSTGRES_READER_HOST}:${POSTGRES_INTERNAL_PORT}"
+                        PORT_FORWARD_ARGS=(-L "$WRITER_PORT_FORWARD" -L "$READER_PORT_FORWARD")
+                    else
+                        PORT_FORWARD_ARGS=(-L "$WRITER_PORT_FORWARD")
+                    fi
+
+                    # Create the SSH tunnel
+                    "$AUTOSSH_DIR"/autossh \
+                        -M 0 \
+                        -f \
+                        -N \
+                        -o TCPKeepAlive=no \
+                        -o ServerAliveCountMax=3 \
+                        -o ServerAliveInterval=15 \
+                        -o ExitOnForwardFailure=yes \
+                        -p "$SSH_PORT" \
+                        -i "$SSH_PRIVATE_KEY_PATH" \
+                        "${PORT_FORWARD_ARGS[@]}" \
+                        "${SSH_USERNAME}@${SSH_HOST}" \
+                        || exit $?
+                fi
             fi
         fi
     fi
