@@ -27,8 +27,9 @@
 CONN_INFO_ENV_VAR_PATTERN='^(.+)_TUNNEL_BPG_CONN_INFO$'
 LEGACY_CONN_INFO_ENV_VAR_PATTERN='^(.+)_SSH_TUNNEL_BPG_CONNECTION_INFO$'
 PG_URL_PATTERN='^postgres(ql)?://[^@]+@([^:]+):([[:digit:]]+)/.+$'
+BUILDPACK_DIR="${HOME}/.borealis-pg"
 SSH_CONFIG_DIR="${HOME}/.ssh"
-DEFAULT_AUTOSSH_DIR="${HOME}/.borealis-pg/autossh"
+DEFAULT_AUTOSSH_DIR="${BUILDPACK_DIR}/autossh"
 
 if [[ -d "$DEFAULT_AUTOSSH_DIR" ]]
 then
@@ -117,13 +118,20 @@ do
                 # The add-on expects the client to register its IP address to connect rather than
                 # use SSH port forwarding
                 BOOT_ID=$(echo -n "$(cat /proc/sys/kernel/random/boot_id)")
-                ADDON_CLIENT_ID="${DYNO}_${BOOT_ID}"
+                DYNO_CLIENT_ID="${DYNO}_${BOOT_ID}"
                 curl \
                     --request POST \
                     "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels" \
                     --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
                     --header "Content-Type: application/json" \
-                    --data-raw "{\"clientId\":\"${ADDON_CLIENT_ID}\"}" &>/dev/null || exit $?
+                    --data-raw "{\"clientId\":\"${DYNO_CLIENT_ID}\"}" &>/dev/null || exit $?
+
+                # Start a process in the background that will wait for the server to shut down and
+                # then delete the private app tunnel
+                CLIENT_APP_JWT="$CLIENT_APP_JWT" "$BUILDPACK_DIR"/server-shutdown-wait.sh \
+                    "$ADDON_ID" \
+                    "$DYNO_CLIENT_ID" \
+                    "$API_BASE_URL" &
             else
                 # The same add-on can be attached to an app multiple times with different
                 # environment variables, so only set up port forwarding if the SSH private key file
