@@ -47,6 +47,23 @@ function normalizeConnItemValue() {
 ALL_ENV_VARS=$(awk 'BEGIN { for (name in ENVIRON) { print name } }')
 for ENV_VAR in $ALL_ENV_VARS
 do
+    # Reset all tunnel connection variables
+    POSTGRES_INTERNAL_PORT='5432'
+    SSH_PORT='22'
+    ADDON_ID=''
+    API_BASE_URL=''
+    CLIENT_APP_JWT=''
+    POSTGRES_WRITER_HOST=''
+    POSTGRES_READER_HOST=''
+    SSH_HOST=''
+    SSH_PUBLIC_HOST_KEY=''
+    SSH_USERNAME=''
+    SSH_USER_PRIVATE_KEY=''
+    TUNNEL_WRITER_URL_HOST=''
+    TUNNEL_WRITER_URL_PORT=''
+    TUNNEL_READER_URL_HOST=''
+    TUNNEL_READER_URL_PORT=''
+
     if [[ "$ENV_VAR" =~ $CONN_INFO_ENV_VAR_PATTERN ]] || [[ "$ENV_VAR" =~ $LEGACY_CONN_INFO_ENV_VAR_PATTERN ]]
     then
         ADDON_ENV_VAR_PREFIX="${BASH_REMATCH[1]}"
@@ -68,9 +85,6 @@ do
                 TUNNEL_READER_URL_HOST="${BASH_REMATCH[2]}"
                 TUNNEL_READER_URL_PORT="${BASH_REMATCH[3]}"
             fi
-
-            POSTGRES_INTERNAL_PORT="5432"
-            SSH_PORT="22"
 
             # Retrieve the secure tunnel connection details from the tunnel connection info env var
             SSH_CONNECTION_INFO=$(printenv "$ENV_VAR")
