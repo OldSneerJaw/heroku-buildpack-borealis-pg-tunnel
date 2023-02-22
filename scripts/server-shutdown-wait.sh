@@ -41,8 +41,8 @@ function _destroy_private_app_tunnel() {
 # Clean up the private app tunnel when the server shuts down
 trap _destroy_private_app_tunnel EXIT
 
-# Otherwise, wait for 30 hours (108,000 seconds) before cleaning up and exiting; since dynos are
-# always shut down after 24 hours + between 0 and 216 minutes
-# (https://devcenter.heroku.com/articles/dynos#automatic-dyno-restarts), this sleep should never
+# Otherwise, wait a long while before cleaning up and exiting; since dynos are generally shut down
+# after 24 hours + between 0 and 216 minutes
+# (https://devcenter.heroku.com/articles/dynos#automatic-dyno-restarts), this sleep should not
 # finish on its own
-sleep 108000
+sleep 21d
