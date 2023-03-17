@@ -33,16 +33,31 @@ function _destroy_private_app_tunnel() {
         --request DELETE \
         "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels/${DYNO_CLIENT_ID}" \
         --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
-        --header "Content-Type: application/json" &>/dev/null || exit $?
+        --header "Content-Type: application/json" &>/dev/null
 
-    exit
+    exit $?
 }
 
 # Clean up the private app tunnel when the server shuts down
 trap _destroy_private_app_tunnel EXIT
 
-# Otherwise, wait a long while before cleaning up and exiting; since dynos are generally shut down
-# after 24 hours + between 0 and 216 minutes
-# (https://devcenter.heroku.com/articles/dynos#automatic-dyno-restarts), this sleep should not
-# finish on its own
-sleep 21d
+while true
+do
+    # Dynos are supposed to be automatically restarted after 24 hours + between 0 and 216 minutes
+    # (https://devcenter.heroku.com/articles/dynos#automatic-dyno-restarts), which works out to
+    # 27h 36m at most. Wait a bit longer than that to keep the script from exiting while the dyno is
+    # still online.
+    sleep 27h 48m || exit
+
+    # Under normal operating conditions the dyno should have automatically restarted by the time the
+    # preceding sleep command finished. If we got here, Heroku may have been forced to globally
+    # disable automatic dyno restarts while troubleshooting a systemic problem on their platform. To
+    # ensure there is no interruption to the client app, prolong the private app tunnel registration
+    # then sleep again.
+    curl \
+        --request POST \
+        "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels" \
+        --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
+        --header "Content-Type: application/json" \
+        --data-raw "{\"clientId\":\"${DYNO_CLIENT_ID}\"}" &>/dev/null || exit $?
+done
