@@ -30,6 +30,7 @@ PG_URL_PATTERN='^postgres(ql)?://[^@]+@([^:]+):([[:digit:]]+)/.+$'
 BUILDPACK_DIR="${HOME}/.borealis-pg"
 SSH_CONFIG_DIR="${HOME}/.ssh"
 DEFAULT_AUTOSSH_DIR="${BUILDPACK_DIR}/autossh"
+PROCESSED_ENTRIES=()
 
 if [[ -d "$DEFAULT_AUTOSSH_DIR" ]]
 then
@@ -127,32 +128,35 @@ do
                 fi
             done
 
-            if [[ "$TUNNEL_WRITER_URL_HOST" != "pg-tunnel.borealis-data.com" ]]
+            # The same add-on can be attached to an app multiple times with different
+            # config/environment variables, so only set up a secure tunnel if it hasn't already been
+            # initialized in a previous iteration
+            if [[ ! "${PROCESSED_ENTRIES[*]}" =~ $ADDON_DB_CONN_STR ]]
             then
-                # The add-on expects the client to register its IP address to connect rather than
-                # use SSH port forwarding
-                BOOT_ID=$(echo -n "$(cat /proc/sys/kernel/random/boot_id)")
-                DYNO_CLIENT_ID="${DYNO}_${BOOT_ID}"
-                curl \
-                    --request POST \
-                    "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels" \
-                    --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
-                    --header "Content-Type: application/json" \
-                    --data-raw "{\"clientId\":\"${DYNO_CLIENT_ID}\"}" &>/dev/null || exit $?
+                PROCESSED_ENTRIES+=("$ADDON_DB_CONN_STR")
 
-                # Start a process in the background that will wait for the server to shut down and
-                # then delete the private app tunnel
-                CLIENT_APP_JWT="$CLIENT_APP_JWT" "$BUILDPACK_DIR"/server-shutdown-wait.sh \
-                    "$ADDON_ID" \
-                    "$DYNO_CLIENT_ID" \
-                    "$API_BASE_URL" &
-            else
-                # The same add-on can be attached to an app multiple times with different
-                # environment variables, so only set up port forwarding if the SSH private key file
-                # hasn't already been created by a previous iteration
-                SSH_PRIVATE_KEY_PATH="${SSH_CONFIG_DIR}/borealis-pg_${SSH_USERNAME}_${SSH_HOST}.pem"
-                if [[ ! -e "$SSH_PRIVATE_KEY_PATH" ]]
+                if [[ "$TUNNEL_WRITER_URL_HOST" != "pg-tunnel.borealis-data.com" ]]
                 then
+                    # The add-on expects the client to register its IP address to connect rather
+                    # than use SSH port forwarding
+                    BOOT_ID=$(echo -n "$(cat /proc/sys/kernel/random/boot_id)")
+                    DYNO_CLIENT_ID="${DYNO}_${BOOT_ID}"
+                    curl \
+                        --request POST \
+                        "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels" \
+                        --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
+                        --header "Content-Type: application/json" \
+                        --data-raw "{\"clientId\":\"${DYNO_CLIENT_ID}\"}" &>/dev/null || exit $?
+
+                    # Start a process in the background that will wait for the server to shut down
+                    # and then destroy the private app tunnel
+                    CLIENT_APP_JWT="$CLIENT_APP_JWT" "$BUILDPACK_DIR"/server-shutdown-wait.sh \
+                        "$ADDON_ID" \
+                        "$DYNO_CLIENT_ID" \
+                        "$API_BASE_URL" &
+                else
+                    SSH_PRIVATE_KEY_PATH="${SSH_CONFIG_DIR}/borealis-pg_${SSH_USERNAME}_${SSH_HOST}.pem"
+
                     # Create the SSH configuration directory if it doesn't already exist
                     mkdir -p "$SSH_CONFIG_DIR"
                     chmod 700 "$SSH_CONFIG_DIR"
