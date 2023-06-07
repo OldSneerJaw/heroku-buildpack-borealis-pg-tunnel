@@ -31,6 +31,7 @@ BUILDPACK_DIR="${HOME}/.borealis-pg"
 SSH_CONFIG_DIR="${HOME}/.ssh"
 DEFAULT_AUTOSSH_DIR="${BUILDPACK_DIR}/autossh"
 PROCESSED_ENTRIES=()
+SECONDS_PER_2_HOURS='7200'
 
 if [[ -d "$DEFAULT_AUTOSSH_DIR" ]]
 then
@@ -144,9 +145,9 @@ do
                     curl \
                         --request POST \
                         "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels" \
+                        --data-raw "{\"clientId\":\"${DYNO_CLIENT_ID}\",\"autoDestroyDelaySeconds\":${SECONDS_PER_2_HOURS}}" \
                         --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
-                        --header "Content-Type: application/json" \
-                        --data-raw "{\"clientId\":\"${DYNO_CLIENT_ID}\"}" &>/dev/null || exit $?
+                        --header "Content-Type: application/json" &>/dev/null || exit $?
 
                     # Start a process in the background that will wait for the server to shut down
                     # and then destroy the private app tunnel

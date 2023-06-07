@@ -28,6 +28,8 @@ ADDON_ID="$1"
 DYNO_CLIENT_ID="$2"
 API_BASE_URL="$3"
 
+SECONDS_PER_2_HOURS='7200'
+
 function _destroy_private_app_tunnel() {
     curl \
         --request DELETE \
@@ -38,26 +40,23 @@ function _destroy_private_app_tunnel() {
     exit $?
 }
 
-# Clean up the private app tunnel when the server shuts down
+# Register the function that will clean up the private app tunnel when the dyno/server shuts down
 trap _destroy_private_app_tunnel EXIT
 
+# Keep the private app tunnel alive for as long as the dyno/server remains online. Extend it by 2
+# hours at a time. If the loop is interrupted and the EXIT handler doesn't run (i.e. the dyno/server
+# did not shut down cleanly), the private app tunnel will be auto-destroyed within 2 hours at most.
 while true
 do
-    # Dynos are supposed to be automatically restarted after 24 hours + between 0 and 216 minutes
-    # (https://devcenter.heroku.com/articles/dynos#automatic-dyno-restarts), which works out to
-    # 27h 36m at most. Wait a bit longer than that to keep the script from exiting while the dyno is
-    # still online.
-    sleep 27h 48m || exit
+    # Wait for a little under half of the auto-destroy delay so that, if there is a network error on
+    # the first attempt to extend the private app tunnel, there will be time to try again before it
+    # is auto-destroyed
+    sleep 58m || exit
 
-    # Under normal operating conditions the dyno should have automatically restarted by the time the
-    # preceding sleep command finished. If we got here, Heroku may have been forced to globally
-    # disable automatic dyno restarts while troubleshooting a systemic problem on their platform. To
-    # ensure there is no interruption to the client app, prolong the private app tunnel registration
-    # then sleep again.
     curl \
         --request POST \
         "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels" \
+        --data-raw "{\"clientId\":\"${DYNO_CLIENT_ID}\",\"autoDestroyDelaySeconds\":${SECONDS_PER_2_HOURS}}" \
         --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
-        --header "Content-Type: application/json" \
-        --data-raw "{\"clientId\":\"${DYNO_CLIENT_ID}\"}" &>/dev/null || exit $?
+        --header "Content-Type: application/json" &>/dev/null
 done
