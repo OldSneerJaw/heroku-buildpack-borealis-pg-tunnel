@@ -31,7 +31,7 @@ BUILDPACK_DIR="${HOME}/.borealis-pg"
 SSH_CONFIG_DIR="${HOME}/.ssh"
 DEFAULT_AUTOSSH_DIR="${BUILDPACK_DIR}/autossh"
 PROCESSED_ENTRIES=()
-SECONDS_PER_2_HOURS='7200'
+SECONDS_PER_75_MINS=4500
 
 if [[ -d "$DEFAULT_AUTOSSH_DIR" ]]
 then
@@ -142,10 +142,10 @@ do
                     # than use SSH port forwarding
                     BOOT_ID=$(echo -n "$(cat /proc/sys/kernel/random/boot_id)")
                     DYNO_CLIENT_ID="${DYNO}_${BOOT_ID}"
-                    curl \
+                    curl --fail \
                         --request POST \
                         "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels" \
-                        --data-raw "{\"clientId\":\"${DYNO_CLIENT_ID}\",\"autoDestroyDelaySeconds\":${SECONDS_PER_2_HOURS}}" \
+                        --data-raw "{\"clientId\":\"${DYNO_CLIENT_ID}\",\"autoDestroyDelaySeconds\":${SECONDS_PER_75_MINS}}" \
                         --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
                         --header "Content-Type: application/json" &>/dev/null || exit $?
 

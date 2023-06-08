@@ -28,11 +28,34 @@ ADDON_ID="$1"
 DYNO_CLIENT_ID="$2"
 API_BASE_URL="$3"
 
-SECONDS_PER_2_HOURS='7200'
+SECONDS_PER_75_MINS=4500
+
+function _extend_private_app_tunnel() {
+    http_response_status=$(curl --request POST \
+        "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels" \
+        --data-raw "{\"clientId\":\"${DYNO_CLIENT_ID}\",\"autoDestroyDelaySeconds\":${SECONDS_PER_75_MINS}}" \
+        --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
+        --header "Content-Type: application/json" \
+        --write-out "%{http_code}" \
+        --silent \
+        --output "/dev/null")
+
+    curl_exit_code=$?
+    if [[ "$curl_exit_code" -ne 0 ]]
+    then
+        # Generally means a networking error of some sort occurred
+        return $curl_exit_code
+    elif [[ "$http_response_status" -ge 500 ]]
+    then
+        # Response status indicates a server-side error (HTTP 5xx)
+        return 99
+    else
+        return 0
+    fi
+}
 
 function _destroy_private_app_tunnel() {
-    curl \
-        --request DELETE \
+    curl --request DELETE \
         "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels/${DYNO_CLIENT_ID}" \
         --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
         --header "Content-Type: application/json" &>/dev/null
@@ -43,20 +66,25 @@ function _destroy_private_app_tunnel() {
 # Register the function that will clean up the private app tunnel when the dyno/server shuts down
 trap _destroy_private_app_tunnel EXIT
 
-# Keep the private app tunnel alive for as long as the dyno/server remains online. Extend it by 2
-# hours at a time. If the loop is interrupted and the EXIT handler doesn't run (i.e. the dyno/server
-# did not shut down cleanly), the private app tunnel will be auto-destroyed within 2 hours at most.
+# Keep the private app tunnel alive for as long as the dyno/server remains online. Extend it by 75
+# minutes at a time. If the loop is interrupted and the EXIT handler doesn't run (i.e. the
+# dyno/server did not shut down cleanly), the private app tunnel will be auto-destroyed within 75
+# minutes at most.
+sleep 1h 5m
+
 while true
 do
-    # Wait for a little under half of the auto-destroy delay so that, if there is a network error on
-    # the first attempt to extend the private app tunnel, there will be time to try again before it
-    # is auto-destroyed
-    sleep 58m || exit
+    _extend_private_app_tunnel
 
-    curl \
-        --request POST \
-        "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels" \
-        --data-raw "{\"clientId\":\"${DYNO_CLIENT_ID}\",\"autoDestroyDelaySeconds\":${SECONDS_PER_2_HOURS}}" \
-        --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
-        --header "Content-Type: application/json" &>/dev/null
+    tunnel_exit_code=$?
+    if [[ "$tunnel_exit_code" -eq 0 ]]
+    then
+        # Wait until there is about 10 minutes left of the auto-destroy delay so that, if there is a
+        # network or server-side error on the next attempt to extend the private app tunnel, there
+        # will be time to try again before the private app tunnel is auto-destroyed
+        sleep 1h 5m
+    else
+        # The tunnel extension request failed, so wait a few minutes and then try again
+        sleep 3m
+    fi
 done
