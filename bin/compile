@@ -24,75 +24,75 @@
 # SOFTWARE.
 
 
-BUILD_DIR="$1"
-CACHE_DIR="$2"
+build_dir="$1"
+cache_dir="$2"
 
-SCRIPT_RELATIVE_DIR=$(dirname "$0")
-cd "${SCRIPT_RELATIVE_DIR}/.." || exit $?
-BUILDPACK_DIR=$(pwd)
+script_relative_dir=$(dirname "$0")
+cd "${script_relative_dir}/.." || exit $?
+buildpack_dir=$(pwd)
 
-BOREALIS_PG_BUILD_DIR="${BUILD_DIR}/.borealis-pg"
+borealis_pg_build_dir="${build_dir}/.borealis-pg"
 
-WAIT_SCRIPT_NAME='server-shutdown-wait.sh'
-WAIT_SCRIPT_PATH="${BOREALIS_PG_BUILD_DIR}/${WAIT_SCRIPT_NAME}"
+wait_script_name='server-shutdown-wait.sh'
+wait_script_path="${borealis_pg_build_dir}/${wait_script_name}"
 
-AUTOSSH_VERSION='1.4g'
-AUTOSSH_ARCHIVE_NAME="autossh-${AUTOSSH_VERSION}.tgz"
-AUTOSSH_ARCHIVE_CHECKSUM='5fc3cee3361ca1615af862364c480593171d0c54ec156de79fc421e31ae21277'
-AUTOSSH_PRIMARY_DOWNLOAD_URL="https://www.harding.motd.ca/autossh/${AUTOSSH_ARCHIVE_NAME}"
-AUTOSSH_SECONDARY_DOWNLOAD_URL="https://www.borealis-data.com/autossh/${AUTOSSH_ARCHIVE_NAME}"
-AUTOSSH_CACHE_DIR="${CACHE_DIR}/autossh-${AUTOSSH_VERSION}"
-AUTOSSH_CACHE_BINARY_PATH="${AUTOSSH_CACHE_DIR}/autossh"
-AUTOSSH_BUILD_DIR="${BOREALIS_PG_BUILD_DIR}/autossh"
-AUTOSSH_BUILD_BINARY_PATH="${AUTOSSH_BUILD_DIR}/autossh"
+autossh_version='1.4g'
+autossh_archive_name="autossh-${autossh_version}.tgz"
+autossh_archive_checksum='5fc3cee3361ca1615af862364c480593171d0c54ec156de79fc421e31ae21277'
+autossh_primary_download_url="https://www.harding.motd.ca/autossh/${autossh_archive_name}"
+autossh_secondary_download_url="https://www.borealis-data.com/autossh/${autossh_archive_name}"
+autossh_cache_dir="${cache_dir}/autossh-${autossh_version}"
+autossh_cache_binary_path="${autossh_cache_dir}/autossh"
+autossh_build_dir="${borealis_pg_build_dir}/autossh"
+autossh_build_binary_path="${autossh_build_dir}/autossh"
 
-STARTUP_SCRIPT_BUILD_DIR="${BUILD_DIR}/.profile.d"
-SECURE_TUNNEL_SCRIPT_NAME='borealis-pg-init-secure-tunnel.sh'
+startup_script_build_dir="${build_dir}/.profile.d"
+secure_tunnel_script_name='borealis-pg-init-secure-tunnel.sh'
 
-mkdir -p "$BOREALIS_PG_BUILD_DIR"
+mkdir -p "$borealis_pg_build_dir"
 
-echo "-----> Installing autossh ${AUTOSSH_VERSION}..."
+echo "-----> Installing autossh ${autossh_version}..."
 
-if [ -f "$AUTOSSH_CACHE_BINARY_PATH" ]
+if [ -f "$autossh_cache_binary_path" ]
 then
-    echo "       Using cached copy of autossh ${AUTOSSH_VERSION}..."
+    echo "       Using cached copy of autossh ${autossh_version}..."
 else
-    echo "       Downloading autossh ${AUTOSSH_VERSION}..."
-    TEMP_AUTOSSH_ARCHIVE_PATH="${CACHE_DIR}/${AUTOSSH_ARCHIVE_NAME}"
-    TEMP_AUTOSSH_CHECKSUM_PATH="${TEMP_AUTOSSH_ARCHIVE_PATH}.sha256"
-    curl -s -f -o "$TEMP_AUTOSSH_ARCHIVE_PATH" "$AUTOSSH_PRIMARY_DOWNLOAD_URL" || curl -s -f -o "$TEMP_AUTOSSH_ARCHIVE_PATH" "$AUTOSSH_SECONDARY_DOWNLOAD_URL" || exit $?
-    echo "${AUTOSSH_ARCHIVE_CHECKSUM}  ${TEMP_AUTOSSH_ARCHIVE_PATH}" > "$TEMP_AUTOSSH_CHECKSUM_PATH"
-    sha256sum -c "$TEMP_AUTOSSH_CHECKSUM_PATH" > /dev/null || exit $?
-    tar -x -C "$CACHE_DIR" -f "$TEMP_AUTOSSH_ARCHIVE_PATH" || exit $?
-    rm "$TEMP_AUTOSSH_ARCHIVE_PATH" "$TEMP_AUTOSSH_CHECKSUM_PATH"
+    echo "       Downloading autossh ${autossh_version}..."
+    temp_autossh_archive_path="${cache_dir}/${autossh_archive_name}"
+    temp_autossh_checksum_path="${temp_autossh_archive_path}.sha256"
+    curl -s -f -o "$temp_autossh_archive_path" "$autossh_primary_download_url" || curl -s -f -o "$temp_autossh_archive_path" "$autossh_secondary_download_url" || exit $?
+    echo "${autossh_archive_checksum}  ${temp_autossh_archive_path}" > "$temp_autossh_checksum_path"
+    sha256sum -c "$temp_autossh_checksum_path" > /dev/null || exit $?
+    tar -x -C "$cache_dir" -f "$temp_autossh_archive_path" || exit $?
+    rm "$temp_autossh_archive_path" "$temp_autossh_checksum_path"
 
-    echo "       Building autossh ${AUTOSSH_VERSION}..."
-    cd "$AUTOSSH_CACHE_DIR" || exit $?
+    echo "       Building autossh ${autossh_version}..."
+    cd "$autossh_cache_dir" || exit $?
     ./configure --quiet || exit $?
     make --quiet || exit $?
-    cd "$BUILDPACK_DIR" || exit $?
+    cd "$buildpack_dir" || exit $?
 
-    echo "       Cleaning up autossh ${AUTOSSH_VERSION} build directory..."
-    TEMP_AUTOSSH_BINARY_PATH="$CACHE_DIR/autossh.borealis-pg-tmp"
-    mv "$AUTOSSH_CACHE_BINARY_PATH" "$TEMP_AUTOSSH_BINARY_PATH" || exit $?
-    rm -rf "$AUTOSSH_CACHE_DIR" || exit $?
-    mkdir -p "$AUTOSSH_CACHE_DIR"
-    mv "$TEMP_AUTOSSH_BINARY_PATH" "$AUTOSSH_CACHE_BINARY_PATH" || exit $?
+    echo "       Cleaning up autossh ${autossh_version} build directory..."
+    temp_autossh_binary_path="$cache_dir/autossh.borealis-pg-tmp"
+    mv "$autossh_cache_binary_path" "$temp_autossh_binary_path" || exit $?
+    rm -rf "$autossh_cache_dir" || exit $?
+    mkdir -p "$autossh_cache_dir"
+    mv "$temp_autossh_binary_path" "$autossh_cache_binary_path" || exit $?
 fi
 
-mkdir -p "$AUTOSSH_BUILD_DIR"
-cp "$AUTOSSH_CACHE_BINARY_PATH" "$AUTOSSH_BUILD_BINARY_PATH"
-chmod a+x "$AUTOSSH_BUILD_BINARY_PATH"
+mkdir -p "$autossh_build_dir"
+cp "$autossh_cache_binary_path" "$autossh_build_binary_path"
+chmod a+x "$autossh_build_binary_path"
 
-mkdir -p "$STARTUP_SCRIPT_BUILD_DIR"
+mkdir -p "$startup_script_build_dir"
 
 echo '-----> Creating SSH tunnel startup script...'
-mkdir -p "$STARTUP_SCRIPT_BUILD_DIR"
-cp "${BUILDPACK_DIR}/profile.d/${SECURE_TUNNEL_SCRIPT_NAME}" "$STARTUP_SCRIPT_BUILD_DIR"
-chmod a+x "${STARTUP_SCRIPT_BUILD_DIR}/${SECURE_TUNNEL_SCRIPT_NAME}"
+mkdir -p "$startup_script_build_dir"
+cp "${buildpack_dir}/profile.d/${secure_tunnel_script_name}" "$startup_script_build_dir"
+chmod a+x "${startup_script_build_dir}/${secure_tunnel_script_name}"
 
 echo '-----> Creating server shutdown wait script...'
-cp "${BUILDPACK_DIR}/scripts/${WAIT_SCRIPT_NAME}" "$WAIT_SCRIPT_PATH"
-chmod a+x "$WAIT_SCRIPT_PATH"
+cp "${buildpack_dir}/scripts/${wait_script_name}" "$wait_script_path"
+chmod a+x "$wait_script_path"
 
 echo '       Done'

@@ -24,16 +24,16 @@
 # SOFTWARE.
 
 
-ADDON_ID="$1"
-DYNO_CLIENT_ID="$2"
-API_BASE_URL="$3"
+addon_id="$1"
+dyno_client_id="$2"
+api_base_url="$3"
 
-SECONDS_PER_75_MINS=4500
+seconds_per_75_mins=4500
 
 function _extend_private_app_tunnel() {
     http_response_status=$(curl --request POST \
-        "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels" \
-        --data-raw "{\"clientId\":\"${DYNO_CLIENT_ID}\",\"autoDestroyDelaySeconds\":${SECONDS_PER_75_MINS}}" \
+        "${api_base_url}/heroku/resources/${addon_id}/private-app-tunnels" \
+        --data-raw "{\"clientId\":\"${dyno_client_id}\",\"autoDestroyDelaySeconds\":${seconds_per_75_mins}}" \
         --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
         --header "Content-Type: application/json" \
         --write-out "%{http_code}" \
@@ -56,7 +56,7 @@ function _extend_private_app_tunnel() {
 
 function _destroy_private_app_tunnel() {
     curl --request DELETE \
-        "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels/${DYNO_CLIENT_ID}" \
+        "${api_base_url}/heroku/resources/${addon_id}/private-app-tunnels/${dyno_client_id}" \
         --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
         --header "Content-Type: application/json" &>/dev/null
 

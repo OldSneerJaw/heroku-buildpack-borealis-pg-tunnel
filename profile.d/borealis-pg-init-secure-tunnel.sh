@@ -24,163 +24,163 @@
 # SOFTWARE.
 
 
-CONN_INFO_ENV_VAR_PATTERN='^(.+)_TUNNEL_BPG_CONN_INFO$'
-LEGACY_CONN_INFO_ENV_VAR_PATTERN='^(.+)_SSH_TUNNEL_BPG_CONNECTION_INFO$'
-PG_URL_PATTERN='^postgres(ql)?://[^@]+@([^:]+):([[:digit:]]+)/.+$'
-BUILDPACK_DIR="${HOME}/.borealis-pg"
-SSH_CONFIG_DIR="${HOME}/.ssh"
-DEFAULT_AUTOSSH_DIR="${BUILDPACK_DIR}/autossh"
-PROCESSED_ENTRIES=()
-SECONDS_PER_75_MINS=4500
+conn_info_env_var_pattern='^(.+)_TUNNEL_BPG_CONN_INFO$'
+legacy_conn_info_env_var_pattern='^(.+)_SSH_TUNNEL_BPG_CONNECTION_INFO$'
+pg_url_pattern='^postgres(ql)?://[^@]+@([^:]+):([[:digit:]]+)/.+$'
+buildpack_dir="${HOME}/.borealis-pg"
+ssh_config_dir="${HOME}/.ssh"
+default_autossh_dir="${buildpack_dir}/autossh"
+processed_entries=()
+seconds_per_75_mins=4500
 
-if [[ -d "$DEFAULT_AUTOSSH_DIR" ]]
+if [[ -d "$default_autossh_dir" ]]
 then
-    AUTOSSH_DIR="$DEFAULT_AUTOSSH_DIR"
+    autossh_dir="$default_autossh_dir"
 else
-    AUTOSSH_DIR="/usr/bin"
+    autossh_dir="/usr/bin"
 fi
 
 function normalizeConnItemValue() {
-    connItemValue="$1"
+    local conn_item_value="$1"
 
-    echo "${connItemValue//\\n/$'\n'}"
+    echo "${conn_item_value//\\n/$'\n'}"
 }
 
-ALL_ENV_VARS=$(awk 'BEGIN { for (name in ENVIRON) { print name } }')
-for ENV_VAR in $ALL_ENV_VARS
+all_env_vars=$(awk 'BEGIN { for (name in ENVIRON) { print name } }')
+for env_var in $all_env_vars
 do
     # Reset all tunnel connection variables
-    POSTGRES_INTERNAL_PORT='5432'
-    SSH_PORT='22'
-    ADDON_ID=''
-    API_BASE_URL=''
-    CLIENT_APP_JWT=''
-    POSTGRES_WRITER_HOST=''
-    POSTGRES_READER_HOST=''
-    SSH_HOST=''
-    SSH_PUBLIC_HOST_KEY=''
-    SSH_USERNAME=''
-    SSH_USER_PRIVATE_KEY=''
-    TUNNEL_WRITER_URL_HOST=''
-    TUNNEL_WRITER_URL_PORT=''
-    TUNNEL_READER_URL_HOST=''
-    TUNNEL_READER_URL_PORT=''
+    postgres_internal_port='5432'
+    ssh_port='22'
+    addon_id=''
+    api_base_url=''
+    client_app_jwt=''
+    postgres_writer_host=''
+    postgres_reader_host=''
+    ssh_host=''
+    ssh_public_host_key=''
+    ssh_username=''
+    ssh_user_private_key=''
+    tunnel_writer_url_host=''
+    tunnel_writer_url_port=''
+    tunnel_reader_url_host=''
+    tunnel_reader_url_port=''
 
-    if [[ "$ENV_VAR" =~ $CONN_INFO_ENV_VAR_PATTERN ]] || [[ "$ENV_VAR" =~ $LEGACY_CONN_INFO_ENV_VAR_PATTERN ]]
+    if [[ "$env_var" =~ $conn_info_env_var_pattern ]] || [[ "$env_var" =~ $legacy_conn_info_env_var_pattern ]]
     then
-        ADDON_ENV_VAR_PREFIX="${BASH_REMATCH[1]}"
+        addon_env_var_prefix="${BASH_REMATCH[1]}"
 
         # There should be a corresponding "*_URL" connection string environment variable
-        ADDON_DB_CONN_STR=$(printenv "${ADDON_ENV_VAR_PREFIX}_URL" || echo '')
-        if [[ "$ADDON_DB_CONN_STR" =~ $PG_URL_PATTERN ]]
+        addon_db_conn_str=$(printenv "${addon_env_var_prefix}_URL" || echo '')
+        if [[ "$addon_db_conn_str" =~ $pg_url_pattern ]]
         then
             # Retrieve the local host and port for the writer SSH tunnel from the "*_URL" env var
             # value
-            TUNNEL_WRITER_URL_HOST="${BASH_REMATCH[2]}"
-            TUNNEL_WRITER_URL_PORT="${BASH_REMATCH[3]}"
+            tunnel_writer_url_host="${BASH_REMATCH[2]}"
+            tunnel_writer_url_port="${BASH_REMATCH[3]}"
 
             # Retrieve the local host and port for the reader SSH tunnel from the "*_READONLY_URL"
             # env var value, if it exists
-            ADDON_READONLY_DB_CONN_STR=$(printenv "${ADDON_ENV_VAR_PREFIX}_READONLY_URL" || echo '')
-            if [[ "$ADDON_READONLY_DB_CONN_STR" =~ $PG_URL_PATTERN ]]
+            addon_readonly_db_conn_str=$(printenv "${addon_env_var_prefix}_READONLY_URL" || echo '')
+            if [[ "$addon_readonly_db_conn_str" =~ $pg_url_pattern ]]
             then
-                TUNNEL_READER_URL_HOST="${BASH_REMATCH[2]}"
-                TUNNEL_READER_URL_PORT="${BASH_REMATCH[3]}"
+                tunnel_reader_url_host="${BASH_REMATCH[2]}"
+                tunnel_reader_url_port="${BASH_REMATCH[3]}"
             fi
 
             # Retrieve the secure tunnel connection details from the tunnel connection info env var
-            SSH_CONNECTION_INFO=$(printenv "$ENV_VAR")
-            IFS=$'|' read -r -d '' -a CONN_INFO_ARRAY <<< "$SSH_CONNECTION_INFO"
-            for CONN_ITEM in "${CONN_INFO_ARRAY[@]}"
+            ssh_connection_info=$(printenv "$env_var")
+            IFS=$'|' read -r -d '' -a conn_info_array <<< "$ssh_connection_info"
+            for conn_item in "${conn_info_array[@]}"
             do
-                if [[ "$CONN_ITEM" =~ ^ADDON_ID:=(.+)$ ]]
+                if [[ "$conn_item" =~ ^ADDON_ID:=(.+)$ ]]
                 then
-                    ADDON_ID=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
-                elif [[ "$CONN_ITEM" =~ ^API_BASE_URL:=(.+)$ ]]
+                    addon_id=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
+                elif [[ "$conn_item" =~ ^API_BASE_URL:=(.+)$ ]]
                 then
-                    API_BASE_URL=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
-                elif [[ "$CONN_ITEM" =~ ^CLIENT_APP_JWT:=(.+)$ ]]
+                    api_base_url=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
+                elif [[ "$conn_item" =~ ^CLIENT_APP_JWT:=(.+)$ ]]
                 then
-                    CLIENT_APP_JWT=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
-                elif [[ "$CONN_ITEM" =~ ^POSTGRES_WRITER_HOST:=(.+)$ ]]
+                    client_app_jwt=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
+                elif [[ "$conn_item" =~ ^POSTGRES_WRITER_HOST:=(.+)$ ]]
                 then
-                    POSTGRES_WRITER_HOST=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
-                elif [[ "$CONN_ITEM" =~ ^POSTGRES_READER_HOST:=(.+)$ ]]
+                    postgres_writer_host=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
+                elif [[ "$conn_item" =~ ^POSTGRES_READER_HOST:=(.+)$ ]]
                 then
-                    POSTGRES_READER_HOST=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
-                elif [[ "$CONN_ITEM" =~ ^POSTGRES_PORT:=(.+)$ ]]
+                    postgres_reader_host=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
+                elif [[ "$conn_item" =~ ^POSTGRES_PORT:=(.+)$ ]]
                 then
-                    POSTGRES_INTERNAL_PORT=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
-                elif [[ "$CONN_ITEM" =~ ^SSH_HOST:=(.+)$ ]]
+                    postgres_internal_port=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
+                elif [[ "$conn_item" =~ ^SSH_HOST:=(.+)$ ]]
                 then
-                    SSH_HOST=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
-                elif [[ "$CONN_ITEM" =~ ^SSH_PORT:=(.+)$ ]]
+                    ssh_host=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
+                elif [[ "$conn_item" =~ ^SSH_PORT:=(.+)$ ]]
                 then
-                    SSH_PORT=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
-                elif [[ "$CONN_ITEM" =~ ^SSH_PUBLIC_HOST_KEY:=(.+)$ ]]
+                    ssh_port=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
+                elif [[ "$conn_item" =~ ^SSH_PUBLIC_HOST_KEY:=(.+)$ ]]
                 then
-                    SSH_PUBLIC_HOST_KEY=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
-                elif [[ "$CONN_ITEM" =~ ^SSH_USERNAME:=(.+)$ ]]
+                    ssh_public_host_key=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
+                elif [[ "$conn_item" =~ ^SSH_USERNAME:=(.+)$ ]]
                 then
-                    SSH_USERNAME=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
-                elif [[ "$CONN_ITEM" =~ ^SSH_USER_PRIVATE_KEY:=(.+)$ ]]
+                    ssh_username=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
+                elif [[ "$conn_item" =~ ^SSH_USER_PRIVATE_KEY:=(.+)$ ]]
                 then
-                    SSH_USER_PRIVATE_KEY=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
+                    ssh_user_private_key=$(normalizeConnItemValue "${BASH_REMATCH[1]}")
                 fi
             done
 
             # The same add-on can be attached to an app multiple times with different
             # config/environment variables, so only set up a secure tunnel if it hasn't already been
             # initialized in a previous iteration
-            if [[ ! "${PROCESSED_ENTRIES[*]}" =~ $ADDON_DB_CONN_STR ]]
+            if [[ ! "${processed_entries[*]}" =~ $addon_db_conn_str ]]
             then
-                PROCESSED_ENTRIES+=("$ADDON_DB_CONN_STR")
+                processed_entries+=("$addon_db_conn_str")
 
-                if [[ "$TUNNEL_WRITER_URL_HOST" != "pg-tunnel.borealis-data.com" ]]
+                if [[ "$tunnel_writer_url_host" != "pg-tunnel.borealis-data.com" ]]
                 then
                     # The add-on expects the client to register its IP address to connect rather
                     # than use SSH port forwarding
-                    BOOT_ID=$(echo -n "$(cat /proc/sys/kernel/random/boot_id)")
-                    DYNO_CLIENT_ID="${DYNO}_${BOOT_ID}"
+                    boot_id=$(echo -n "$(cat /proc/sys/kernel/random/boot_id)")
+                    dyno_client_id="${DYNO}_${boot_id}"
                     curl --fail \
                         --request POST \
-                        "${API_BASE_URL}/heroku/resources/${ADDON_ID}/private-app-tunnels" \
-                        --data-raw "{\"clientId\":\"${DYNO_CLIENT_ID}\",\"autoDestroyDelaySeconds\":${SECONDS_PER_75_MINS}}" \
-                        --header "Authorization: Bearer ${CLIENT_APP_JWT}" \
+                        "${api_base_url}/heroku/resources/${addon_id}/private-app-tunnels" \
+                        --data-raw "{\"clientId\":\"${dyno_client_id}\",\"autoDestroyDelaySeconds\":${seconds_per_75_mins}}" \
+                        --header "Authorization: Bearer ${client_app_jwt}" \
                         --header "Content-Type: application/json" &>/dev/null || exit $?
 
                     # Start a process in the background that will wait for the server to shut down
                     # and then destroy the private app tunnel
-                    CLIENT_APP_JWT="$CLIENT_APP_JWT" "$BUILDPACK_DIR"/server-shutdown-wait.sh \
-                        "$ADDON_ID" \
-                        "$DYNO_CLIENT_ID" \
-                        "$API_BASE_URL" &
+                    CLIENT_APP_JWT="$client_app_jwt" "$buildpack_dir"/server-shutdown-wait.sh \
+                        "$addon_id" \
+                        "$dyno_client_id" \
+                        "$api_base_url" &
                 else
-                    SSH_PRIVATE_KEY_PATH="${SSH_CONFIG_DIR}/borealis-pg_${SSH_USERNAME}_${SSH_HOST}.pem"
+                    ssh_private_key_path="${ssh_config_dir}/borealis-pg_${ssh_username}_${ssh_host}.pem"
 
                     # Create the SSH configuration directory if it doesn't already exist
-                    mkdir -p "$SSH_CONFIG_DIR"
-                    chmod 700 "$SSH_CONFIG_DIR"
+                    mkdir -p "$ssh_config_dir"
+                    chmod 700 "$ssh_config_dir"
 
                     # The SSH private key file doesn't yet exist, so create and populate it
-                    echo "$SSH_USER_PRIVATE_KEY" > "$SSH_PRIVATE_KEY_PATH"
-                    chmod 400 "$SSH_PRIVATE_KEY_PATH"
+                    echo "$ssh_user_private_key" > "$ssh_private_key_path"
+                    chmod 400 "$ssh_private_key_path"
 
                     # Add the SSH server's public host key to known_hosts for server authentication
-                    echo "${SSH_HOST} ${SSH_PUBLIC_HOST_KEY}" >> "${SSH_CONFIG_DIR}/known_hosts"
+                    echo "${ssh_host} ${ssh_public_host_key}" >> "${ssh_config_dir}/known_hosts"
 
                     # Set up the port forwarding argument(s)
-                    WRITER_PORT_FORWARD="${TUNNEL_WRITER_URL_HOST}:${TUNNEL_WRITER_URL_PORT}:${POSTGRES_WRITER_HOST}:${POSTGRES_INTERNAL_PORT}"
-                    if [[ -n "$POSTGRES_READER_HOST" ]] && [[ -n "$TUNNEL_READER_URL_PORT" ]]
+                    writer_port_forward="${tunnel_writer_url_host}:${tunnel_writer_url_port}:${postgres_writer_host}:${postgres_internal_port}"
+                    if [[ -n "$postgres_reader_host" ]] && [[ -n "$tunnel_reader_url_port" ]]
                     then
-                        READER_PORT_FORWARD="${TUNNEL_READER_URL_HOST}:${TUNNEL_READER_URL_PORT}:${POSTGRES_READER_HOST}:${POSTGRES_INTERNAL_PORT}"
-                        PORT_FORWARD_ARGS=(-L "$WRITER_PORT_FORWARD" -L "$READER_PORT_FORWARD")
+                        reader_port_forward="${tunnel_reader_url_host}:${tunnel_reader_url_port}:${postgres_reader_host}:${postgres_internal_port}"
+                        port_forward_args=(-L "$writer_port_forward" -L "$reader_port_forward")
                     else
-                        PORT_FORWARD_ARGS=(-L "$WRITER_PORT_FORWARD")
+                        port_forward_args=(-L "$writer_port_forward")
                     fi
 
                     # Create the SSH tunnel
-                    "$AUTOSSH_DIR"/autossh \
+                    "$autossh_dir"/autossh \
                         -M 0 \
                         -f \
                         -N \
@@ -188,10 +188,10 @@ do
                         -o ServerAliveCountMax=3 \
                         -o ServerAliveInterval=15 \
                         -o ExitOnForwardFailure=yes \
-                        -p "$SSH_PORT" \
-                        -i "$SSH_PRIVATE_KEY_PATH" \
-                        "${PORT_FORWARD_ARGS[@]}" \
-                        "${SSH_USERNAME}@${SSH_HOST}" \
+                        -p "$ssh_port" \
+                        -i "$ssh_private_key_path" \
+                        "${port_forward_args[@]}" \
+                        "${ssh_username}@${ssh_host}" \
                         || exit $?
                 fi
             fi
